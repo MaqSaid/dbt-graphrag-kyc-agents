@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+.env
+
+# Testing
+.coverage
+htmlcov/
+.hypothesis/
+
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+
+# Data
+data/warehouse.duckdb

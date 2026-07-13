@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Architecture Boundary Guard",
+  "description": "Runs architecture boundary tests after task execution to verify hexagonal architecture import rules are not violated",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "uv run pytest tests/architecture/test_boundaries.py -x -q"
+  }
+}

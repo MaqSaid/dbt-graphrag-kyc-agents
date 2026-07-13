@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: main
+    tables:
+      - name: customers
+        columns:
+          - name: customer_id
+            tests:
+              - not_null
+          - name: full_name
+            tests:
+              - not_null
+          - name: email
+            tests:
+              - not_null

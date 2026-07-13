@@ -1,0 +1,7 @@
+customer_id,full_name,date_of_birth,national_id,address,email,phone,ip_address
+cust_001,John Smith,1985-03-15,SSN123456789,123 Main St Apt 4 New York NY 10001,john.smith@email.com,+14155551234,192.168.1.100
+cust_002,Jane Doe,1990-07-22,SSN987654321,456 Oak Ave Chicago IL 60601,jane.doe@email.com,+14155555678,10.0.0.50
+cust_003,Robert Johnson,1978-11-03,SSN111222333,123 Main St Apt 4 New York NY 10001,rjohnson@mail.com,+14155559012,192.168.1.100
+cust_004,Maria Garcia,1992-04-18,SSN444555666,789 Pine Rd Los Angeles CA 90001,mgarcia@email.com,+14155553456,172.16.0.1
+cust_005,Ahmed Hassan,1988-09-30,SSN777888999,321 Elm St Boston MA 02101,ahassan@email.com,+14155557890,10.0.0.50
+cust_006,Viktor Petrov,1975-01-25,SSN101010101,555 Dark Alley Moscow RU 00001,vpetrov@suspicious.net,+79161234567,192.168.1.100

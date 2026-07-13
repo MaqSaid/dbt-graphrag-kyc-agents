@@ -1,0 +1,21 @@
+name: 'dbt_kyc'
+version: '1.0.0'
+config-version: 2
+
+profile: 'dbt_kyc'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  dbt_kyc:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

@@ -1,0 +1,12 @@
+variable "project_name" { type = string }
+variable "environment" { type = string }
+variable "container_image" { type = string }
+variable "task_cpu" { type = number }
+variable "task_memory" { type = number }
+variable "min_tasks" { type = number }
+variable "max_tasks" { type = number }
+variable "subnet_ids" { type = list(string) }
+variable "security_group_id" { type = string }
+variable "target_group_arn" { type = string }
+variable "execution_role_arn" { type = string }
+variable "task_role_arn" { type = string }

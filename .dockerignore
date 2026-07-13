@@ -1,0 +1,12 @@
+.git
+__pycache__
+*.pyc
+.env
+.venv
+node_modules
+.kiro
+terraform/
+data/*.duckdb
+.pytest_cache
+.mypy_cache
+.ruff_cache

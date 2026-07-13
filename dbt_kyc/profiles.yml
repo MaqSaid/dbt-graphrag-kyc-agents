@@ -1,0 +1,11 @@
+dbt_kyc:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: '../data/warehouse.duckdb'
+      threads: 4
+    test:
+      type: duckdb
+      path: ':memory:'
+      threads: 1

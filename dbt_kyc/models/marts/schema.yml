@@ -1,0 +1,88 @@
+version: 2
+
+models:
+  - name: nodes_customer
+    columns:
+      - name: entity_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+
+  - name: nodes_address
+    columns:
+      - name: entity_id
+        tests:
+          - unique
+          - not_null
+      - name: address_hash
+        tests:
+          - not_null
+
+  - name: nodes_ip
+    columns:
+      - name: entity_id
+        tests:
+          - unique
+          - not_null
+      - name: ip_address
+        tests:
+          - not_null
+
+  - name: nodes_phone
+    columns:
+      - name: entity_id
+        tests:
+          - unique
+          - not_null
+      - name: phone_number
+        tests:
+          - not_null
+
+  - name: edges_shares_address
+    columns:
+      - name: source_node_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('nodes_customer')
+              field: customer_id
+      - name: target_node_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('nodes_customer')
+              field: customer_id
+
+  - name: edges_shares_ip
+    columns:
+      - name: source_node_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('nodes_customer')
+              field: customer_id
+      - name: target_node_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('nodes_customer')
+              field: customer_id
+
+  - name: edges_shares_phone
+    columns:
+      - name: source_node_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('nodes_customer')
+              field: customer_id
+      - name: target_node_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('nodes_customer')
+              field: customer_id

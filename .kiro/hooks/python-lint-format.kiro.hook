@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Auto Lint & Format",
+  "description": "Runs Ruff formatting and linting on every Python file modification to enforce code quality standards automatically",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.py"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "uv run ruff format {file} && uv run ruff check --fix {file}"
+  }
+}
