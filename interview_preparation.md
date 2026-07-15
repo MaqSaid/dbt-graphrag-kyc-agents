@@ -1,279 +1,249 @@
-# Interview Preparation Guide: Autonomous Multi-Agent KYC Investigation & Fraud Network Pipeline
+# Interview Preparation: Autonomous Multi-Agent KYC Investigation & Fraud Network Pipeline
 
-> **Role:** Senior AI Data Engineer (20+ Years Experience)
+> **Prepared for:** Principal Data Architect / Senior AI Data Engineer Interview
 > **Project:** dbt-graphrag-kyc-agents
-> **Core Objective:** Demonstrate deep expertise in traditional data stacks, enterprise backend architectures, and modern cloud-native AI/Data scaling.
+> **Architecture:** Hexagonal (Ports & Adapters) + Domain-Driven Design + Multi-Agent Orchestration
+> **Stack:** Python 3.11 · LangGraph · Strands Agents SDK · Neo4j · DuckDB · dbt · FastAPI · AWS
 
 ---
 
 ## 1. Executive Summary & Core Project Architecture
 
-### High-Level Technical Overview
+### 1.1 Business Problem
 
-This system is an **enterprise-grade KYC (Know Your Customer) fraud detection pipeline** that identifies synthetic identity fraud rings during customer onboarding. It combines:
+Financial institutions face a critical blind spot in KYC (Know Your Customer) onboarding: **Synthetic Identity Fraud Rings**. Traditional KYC systems operate in isolation—verifying documents, screening names against watchlists—but fail to detect clusters of fabricated identities that share hidden infrastructure (addresses, IP addresses, phone numbers) with known fraudulent entities.
 
-- **Multi-Agent AI Orchestration** — 5 specialized agents coordinated by a LangGraph state machine
-- **Graph-Based Relationship Analysis (GraphRAG)** — Neo4j 2-hop traversals to discover hidden fraud networks
-- **Hexagonal Architecture (Ports & Adapters)** — Zero coupling between business logic and infrastructure
-- **ELT Pipeline (dbt + DuckDB)** — Data transformation from raw CSV into graph-ready models
-- **ISO 27001/42001 Compliance** — Immutable audit trails with hash chains, full LLM explainability
+**The gap:** A fraudster passes every individual check. But one graph traversal away, they share an address with a sanctioned entity that nobody is querying.
 
-**Business Problem Solved:** Traditional KYC systems verify customers in isolation. A fraudster can pass every individual check while sharing infrastructure (addresses, IPs, phones) with blacklisted entities. This system queries multi-hop graph relationships to expose those hidden connections.
+### 1.2 System Objective
 
-**Key Metrics:**
-- 5 specialized AI agents working as a coordinated team
-- 18 correctness properties verified via Hypothesis property-based testing
-- 7 architectural boundary tests preventing hexagonal layer violations
-- Decision determinism guaranteed — same inputs always produce same outputs
-- Sub-120-second end-to-end evaluation latency target
+Build an enterprise-grade, autonomous evaluation pipeline that:
 
-### DIAGRAM 1: Comprehensive End-to-End Application Architecture
+1. Accepts customer onboarding requests via async REST API
+2. Orchestrates 5 specialized AI agents through a deterministic LangGraph state machine
+3. Discovers multi-hop relationships via GraphRAG (Graph-Retrieval Augmented Generation)
+4. Produces explainable compliance reports with immutable audit trails (ISO 27001/42001)
+5. Issues decisions (APPROVE / DENY / ESCALATE_TO_HUMAN_REVIEW) within 120 seconds
+
+### 1.3 Key Technical Differentiators
+
+| Differentiator | Implementation |
+|---|---|
+| Deterministic orchestration | LangGraph StateGraph with typed KYCState aggregate root |
+| Graph-based fraud detection | Neo4j 2-hop neighborhood traversal via parameterized Cypher |
+| Hexagonal architecture | Domain layer imports only stdlib + Pydantic; enforced by pytest-archon |
+| Property-based testing | Hypothesis library validates 18 invariants (score bounds, determinism, round-trip) |
+| Explainable AI | Every LLM call traced with prompt hash, token count, and source node mapping |
+| Security-first | Prompt injection detection, Cypher whitelist, input sanitization middleware |
+
+### 1.4 DIAGRAM 1: End-to-End Data & Application Flow
 
 ```mermaid
 flowchart TB
-    subgraph INGESTION["Data Ingestion Layer"]
-        CSV["Raw CSV / API Intake"]
-        DuckDB["DuckDB Analytical Warehouse"]
-        dbt["dbt-core + dbt-duckdb<br/>ELT Transformations"]
+    subgraph Ingestion["Data Ingestion Layer"]
+        CSV[("Raw CSV<br/>Customer Records")]
+        DuckDB[("DuckDB<br/>Analytical Warehouse")]
     end
 
-    subgraph API["API Boundary (FastAPI)"]
-        POST["/evaluate (POST 202)"]
-        STATUS["/status/{id} (GET)"]
-        REPORT["/report/{id} (GET)"]
-        HEALTH["/health (GET)"]
-        SEC["Security Middleware<br/>Injection Detection / JWT / RBAC"]
+    subgraph Transformation["ELT Transformation (dbt)"]
+        STG["stg_customers<br/>(clean, dedupe, hash)"]
+        NODES_C["nodes_customer"]
+        NODES_A["nodes_address"]
+        NODES_IP["nodes_ip"]
+        NODES_PH["nodes_phone"]
+        EDGES_ADDR["edges_shares_address"]
+        EDGES_IP["edges_shares_ip"]
+        EDGES_PH["edges_shares_phone"]
     end
 
-    subgraph ORCHESTRATION["Application Layer (LangGraph StateGraph)"]
+    subgraph GraphDB["Graph Database (Neo4j 5)"]
+        NEO4J[("Neo4j<br/>Property Graph")]
+    end
+
+    subgraph API["API Layer (FastAPI)"]
+        POST_EVAL["POST /evaluate"]
+        GET_STATUS["GET /status/{id}"]
+        GET_REPORT["GET /report/{id}"]
+        SEC["Security Middleware<br/>Injection Detection · JWT · Rate Limit"]
+    end
+
+    subgraph Orchestration["Orchestration (LangGraph StateGraph)"]
         INIT["Initialize"]
-        VERIFY["Verify Identity"]
-        SCREEN["Screen Sanctions"]
-        ANALYZE["Analyze Graph"]
-        DRAFT["Draft Report"]
-        DECIDE["Evaluate Decision"]
-        FINALIZE["Finalize"]
+        VERIFY["Identity Verifier<br/>(Strands Agent)"]
+        SCREEN["Sanctions Analyst<br/>(Strands Agent)"]
+        GRAPH["Graph Analyst<br/>(Strands Agent)"]
+        REPORT["Report Drafter<br/>(Strands Agent)"]
+        DECIDE["Decision Engine<br/>(Deterministic)"]
+        FINAL["Finalize"]
     end
 
-    subgraph AGENTS["Agent Layer (Strands SDK)"]
-        IDV["Identity Verifier Agent<br/>validate_email, validate_phone,<br/>check_registry, confidence_score"]
-        SAN["Sanctions Analyst Agent<br/>search_ofac, search_eu,<br/>search_un, search_pep"]
-        GRA["Graph Analyst Agent<br/>query_address_nbr, query_ip_nbr,<br/>extract_fraud_paths, compute_risk"]
-        RPT["Report Drafter Agent<br/>executive_summary,<br/>risk_assessment, trace"]
+    subgraph External["External Systems"]
+        BEDROCK["Amazon Bedrock<br/>(Claude LLM)"]
+        WATCHLISTS["OFAC · EU · UN · PEP<br/>Sanctions Lists"]
+        REGISTRY["Government<br/>Registry API"]
+        S3["Amazon S3<br/>Audit Logs"]
     end
 
-    subgraph DOMAIN["Domain Layer (Pure Business Logic)"]
-        PORTS["Ports (ABCs)<br/>GraphDatabasePort, LLMClientPort,<br/>WatchlistPort, AuditLogPort,<br/>WarehousePort, RegistryPort"]
-        SCHEMAS["Schemas (Pydantic v2 strict)<br/>KYCState, CustomerPayload,<br/>VerificationResult, GraphAnalysisResult,<br/>ComplianceReport, AuditLogEntry"]
-        ENGINE["Decision Engine<br/>composite_score, evaluate_decision,<br/>has_critical_flag"]
-    end
+    CSV -->|"seed + load"| DuckDB
+    DuckDB -->|"dbt run"| STG
+    STG --> NODES_C & NODES_A & NODES_IP & NODES_PH
+    STG --> EDGES_ADDR & EDGES_IP & EDGES_PH
+    NODES_C & NODES_A & EDGES_ADDR -->|"LOAD CSV / APOC"| NEO4J
 
-    subgraph INFRA["Infrastructure Layer (Adapters)"]
-        NEO4J_A["Neo4jAdapter"]
-        BEDROCK_A["BedrockAdapter"]
-        WATCHLIST_A["WatchlistAPIAdapter"]
-        S3_A["S3AuditLogAdapter"]
-        DUCKDB_A["DuckDBAdapter"]
-        REG_A["RegistryAdapter"]
-        CB["CircuitBreaker + Retry"]
-    end
+    POST_EVAL -->|"KYCState"| SEC --> INIT
+    INIT --> VERIFY --> SCREEN --> GRAPH --> REPORT --> DECIDE --> FINAL
+    FINAL -->|"202 Accepted"| GET_STATUS
+    FINAL -->|"Compliance Report"| GET_REPORT
 
-    subgraph EXTERNAL["External Systems"]
-        NEO4J["Neo4j 5 / Neptune"]
-        BEDROCK["Amazon Bedrock (Claude)"]
-        S3["Amazon S3 (Audit Logs)"]
-        WATCHLISTS["OFAC / EU / UN / PEP APIs"]
-        REGISTRY["Government Registry"]
-    end
-
-    CSV --> DuckDB --> dbt --> NEO4J
-    POST --> SEC --> INIT
-    INIT --> VERIFY --> SCREEN --> ANALYZE --> DRAFT --> DECIDE --> FINALIZE
-    VERIFY -.-> IDV
-    SCREEN -.-> SAN
-    ANALYZE -.-> GRA
-    DRAFT -.-> RPT
-    IDV --> PORTS
-    SAN --> PORTS
-    GRA --> PORTS
-    RPT --> PORTS
-    PORTS --> ENGINE
-    PORTS --> NEO4J_A & BEDROCK_A & WATCHLIST_A & S3_A & DUCKDB_A & REG_A
-    NEO4J_A --> CB --> NEO4J
-    BEDROCK_A --> CB --> BEDROCK
-    S3_A --> S3
-    WATCHLIST_A --> WATCHLISTS
-    REG_A --> REGISTRY
-    DUCKDB_A --> DuckDB
+    VERIFY <-->|"validate fields"| REGISTRY
+    SCREEN <-->|"screen names"| WATCHLISTS
+    GRAPH <-->|"Cypher queries"| NEO4J
+    VERIFY & SCREEN & GRAPH & REPORT <-->|"tool calls"| BEDROCK
+    FINAL -->|"immutable hash-chain"| S3
 ```
 
-### Key Architectural Decisions to Articulate
+### 1.5 Architecture Layers (Hexagonal / Clean Architecture)
 
-| Decision | Rationale |
-|----------|-----------|
-| Hexagonal Architecture | Complete decoupling of business logic from I/O; adapters swappable for testing/cloud migration |
-| LangGraph for Orchestration | Deterministic state machine with explicit conditional edges, retry semantics, and full traceability |
-| Strands Agents SDK | @tool decorator pattern for LLM-driven tool selection; read-only constraint enforcement |
-| Pydantic v2 strict mode | Runtime type safety at every boundary; zero implicit coercion; serialization round-trip guarantees |
-| dbt for ELT | Version-controlled SQL transformations; built-in testing (unique, not_null, relationships); idempotent runs |
-| Neo4j for Graph | Native graph traversal (Cypher); APOC extensions; 2-hop neighborhood queries in O(edges) |
-| Circuit Breaker pattern | Prevents cascading failures; CLOSED→OPEN→HALF_OPEN state machine per external service |
+| Layer | Responsibility | Import Rules |
+|-------|---------------|--------------|
+| **Domain** (`src/domain/`) | Pure business logic, schemas, ports (ABCs), decision engine | stdlib + Pydantic ONLY |
+| **Infrastructure** (`src/infrastructure/`) | Adapters implementing ports (Neo4j, Bedrock, S3, DuckDB) | May import domain |
+| **Application** (`src/application/`) | LangGraph orchestrator, DI container wiring | May import domain |
+| **API** (`src/api/`) | FastAPI routes, security middleware, HTTP boundary | May import domain + application |
+| **Agents** (`src/agents/`) | Strands agent definitions with @tool decorators | May import domain (ports, schemas) |
+
+**Enforcement:** `pytest-archon` runs on every PR, failing the build if any layer violation is introduced.
 
 ---
 
 ## 2. Backend & API Design (Current Implementation)
 
-### API Architecture: REST with Async Processing Pattern
+### 2.1 API Pattern Selection: Asynchronous REST with Polling
 
-The system uses a **REST API built on FastAPI** with an **asynchronous processing pattern** (Accept → Poll → Retrieve):
+**Rationale:** KYC evaluations involve multiple sequential LLM calls and graph traversals (60–120s total). A synchronous request/response pattern would exhaust connection pools and trigger gateway timeouts. Instead:
 
-1. **POST /api/v1/kyc/evaluate** — Accepts customer payload, returns `202 Accepted` with `evaluation_id`
-2. **GET /api/v1/kyc/status/{id}** — Polls current evaluation state (stage, decision)
-3. **GET /api/v1/kyc/report/{id}** — Retrieves completed compliance report
-4. **GET /api/v1/health** — Liveness/readiness check
-5. **GET /metrics** — Prometheus metrics endpoint
+- `POST /api/v1/kyc/evaluate` → **202 Accepted** (immediate, non-blocking)
+- `GET /api/v1/kyc/status/{id}` → Poll evaluation progress
+- `GET /api/v1/kyc/report/{id}` → Retrieve completed compliance report
+- `GET /api/v1/health` → Liveness + readiness probe
 
-**Why REST with 202 Accepted (not synchronous):**
-- KYC evaluations involve 4 sequential agent invocations, each hitting external services
-- End-to-end latency target is <120 seconds — far exceeds acceptable HTTP response times
-- Polling pattern enables frontend progress indicators and graceful timeout handling
-- Decouples acceptance validation from processing — immediate feedback to caller
+**Why not GraphQL?** The KYC domain has a fixed, well-defined response shape. GraphQL's flexibility adds complexity without benefit here. The report structure is standardized for regulatory compliance — clients should not select arbitrary subsets.
 
-### Authentication, Authorization & Security
+**Why not gRPC?** Internal microservice communication could use gRPC, but the primary consumer is a compliance dashboard (browser-based). REST with OpenAPI spec provides better DX for integration teams.
 
-| Layer | Implementation |
-|-------|---------------|
-| Authentication | JWT tokens (python-jose with cryptography backend) |
-| Authorization | RBAC with evaluation-level access control |
-| Input Validation | Pydantic v2 strict models with field-level validators (email RFC 5322, phone E.164, IP format) |
-| Injection Prevention | Regex-based prompt injection scanner (10 known patterns); Cypher query whitelist |
-| Rate Limiting | Configurable per-minute limits (default 100 req/min) |
-| Payload Size | Max 1MB request body |
-| CORS | Middleware-configured (restrictive in production) |
-| Correlation Tracking | X-Correlation-Id header propagated through all layers |
+### 2.2 Security Architecture
 
-### Security Middleware Deep Dive
+| Layer | Mechanism | Implementation |
+|-------|-----------|----------------|
+| Authentication | JWT (python-jose) | Bearer token validation on all `/kyc/*` routes |
+| Authorization | RBAC via token claims | `compliance_officer`, `admin`, `auditor` roles |
+| Input Validation | Pydantic v2 strict mode | Email (RFC 5322), Phone (E.164), IP (IPv4/v6) |
+| Injection Defense | Regex pattern scanning | 10+ prompt injection patterns detected pre-LLM |
+| Cypher Safety | Query whitelist + blocked ops | Only MATCH/RETURN allowed; CREATE/DELETE blocked |
+| Sanitization | Unicode + control char stripping | Null bytes, direction overrides, control chars removed |
+| Rate Limiting | Token bucket (100 req/min default) | Configurable via `KYC_RATE_LIMIT_PER_MINUTE` |
+| Payload Size | 1MB max | Prevents resource exhaustion |
 
-The `SecurityMiddleware` scans all incoming payloads for:
-- Prompt injection patterns: "ignore previous instructions", "[INST]", "<|system|>", etc.
-- Unicode direction overrides and null byte attacks
-- Control character injection
-- Cypher write operations (CREATE, MERGE, SET, DELETE blocked; only MATCH...RETURN permitted)
+### 2.3 Connection Pooling & Resilience
 
-**Key Interview Point:** "We enforce defense-in-depth. Even if an attacker bypasses API validation, the Cypher query whitelist at the adapter layer prevents graph mutation. Agents are read-only by design."
+```python
+# Circuit breaker pattern (src/infrastructure/resilience/)
+- Neo4j driver: connection pool managed by official neo4j-python driver (bolt pool)
+- HTTP clients (httpx): async connection pooling with configurable limits
+- Circuit breaker: opens after 5 consecutive failures, recovers after 60s
+- Retry policy: exponential backoff, max 3 retries per agent invocation
+- Timeout cascade: identity(10s) → sanctions(15s) → graph(20s) → report(30s)
+```
 
-### Performance Optimization Techniques
+### 2.4 Caching Strategy
 
-| Technique | Implementation |
-|-----------|---------------|
-| Async I/O | FastAPI with uvicorn[standard]; async Neo4j driver; all port methods are `async` |
-| Connection Pooling | Neo4j AsyncDriver manages connection pool internally |
-| Circuit Breaker | Per-service CB prevents wasting time on downed services (5 failures → open → 60s recovery) |
-| Retry with Backoff | Configurable max_retries=3 per agent invocation |
-| State Machine Routing | Conditional edges short-circuit on critical flags (immediate DENY skips remaining agents) |
-| Prometheus Metrics | Histograms for latency tracking; counters for throughput; gauges for active evaluations |
-| Structured Logging | structlog with JSON output; context-bound correlation IDs |
-| Token Budget | Per-evaluation token cap (50,000 tokens) prevents runaway LLM costs |
+| Cache Layer | Target | TTL | Invalidation |
+|-------------|--------|-----|--------------|
+| Sanctions list cache | OFAC/EU/UN snapshot | 24h | Daily refresh or webhook |
+| Graph neighborhood cache | 2-hop results for hot addresses | 15min | Write-through on new edges |
+| LLM response cache | Deterministic tool calls | Session-scoped | Per-evaluation lifecycle |
 
-### DIAGRAM 2: API Design & Component Interaction Flow
+### 2.5 DIAGRAM 2: API Design & Component Interaction
 
 ```mermaid
-sequenceDiagram
-    participant Client
-    participant FastAPI
-    participant Security as Security Middleware
-    participant Router as KYC Router
-    participant Orchestrator as LangGraph Orchestrator
-    participant IDAgent as Identity Verifier
-    participant SANAgent as Sanctions Analyst
-    participant GRAAgent as Graph Analyst
-    participant RPTAgent as Report Drafter
-    participant DecisionEngine as Decision Engine
-    participant Neo4j
-    participant Bedrock as Amazon Bedrock
-    participant S3 as S3 Audit Log
-
-    Client->>FastAPI: POST /api/v1/kyc/evaluate
-    FastAPI->>Security: Scan payload (injection detection)
-    Security-->>FastAPI: Payload clean
-    FastAPI->>Router: Validate with Pydantic strict model
-    Router-->>Client: 202 Accepted {evaluation_id}
-
-    Note over Orchestrator: Async processing begins
-    Router->>Orchestrator: Start KYC StateGraph
-
-    Orchestrator->>IDAgent: Verify Identity
-    IDAgent->>Bedrock: LLM tool selection
-    IDAgent-->>Orchestrator: IdentityVerificationResult
-
-    alt Identity Ambiguous & retries < 3
-        Orchestrator->>IDAgent: Retry verification
+flowchart LR
+    subgraph Client["Client Layer"]
+        DASH["Compliance Dashboard"]
+        CURL["API Consumer<br/>(curl / SDK)"]
     end
 
-    Orchestrator->>SANAgent: Screen Sanctions
-    SANAgent->>Bedrock: LLM tool selection
-    SANAgent-->>Orchestrator: SanctionsScreeningResult
+    subgraph Gateway["API Gateway"]
+        ALB["Application Load Balancer<br/>TLS Termination · Health Check"]
+    end
 
-    Orchestrator->>GRAAgent: Analyze Graph
-    GRAAgent->>Neo4j: Cypher: 2-hop neighborhood query
-    GRAAgent->>Neo4j: Cypher: shortestPath extraction
-    GRAAgent->>Bedrock: Risk assessment reasoning
-    GRAAgent-->>Orchestrator: GraphAnalysisResult
+    subgraph FastAPI["FastAPI Application"]
+        direction TB
+        MW_AUTH["Middleware: JWT Auth"]
+        MW_RATE["Middleware: Rate Limiter"]
+        MW_SEC["Middleware: Injection Scanner"]
+        MW_VAL["Middleware: Payload Validation"]
+        
+        R_EVAL["POST /evaluate<br/>→ 202 Accepted"]
+        R_STATUS["GET /status/{id}<br/>→ Progress"]
+        R_REPORT["GET /report/{id}<br/>→ Compliance PDF"]
+        R_HEALTH["GET /health<br/>→ Readiness"]
+    end
 
-    Orchestrator->>RPTAgent: Draft Report
-    RPTAgent->>Bedrock: Generate compliance narrative
-    RPTAgent-->>Orchestrator: ComplianceReport
+    subgraph AppLayer["Application Layer"]
+        DI["DI Container<br/>(build_container)"]
+        ORCH["LangGraph Orchestrator<br/>(StateGraph)"]
+    end
 
-    Orchestrator->>DecisionEngine: Evaluate composite score
-    DecisionEngine-->>Orchestrator: Decision (APPROVE/DENY/ESCALATE)
+    subgraph Agents["Strands Agent Pool"]
+        A1["Identity Verifier"]
+        A2["Sanctions Analyst"]
+        A3["Graph Analyst"]
+        A4["Report Drafter"]
+    end
 
-    Orchestrator->>S3: Write immutable audit log entry
+    subgraph Infra["Infrastructure Adapters"]
+        NEO["Neo4jAdapter"]
+        BED["BedrockAdapter"]
+        WL["WatchlistAPIAdapter"]
+        S3A["S3AuditLogAdapter"]
+        DUCK["DuckDBAdapter"]
+        REG["RegistryAdapter"]
+    end
 
-    Client->>FastAPI: GET /status/{evaluation_id}
-    FastAPI-->>Client: {status: "completed", decision: "DENY"}
-
-    Client->>FastAPI: GET /report/{evaluation_id}
-    FastAPI-->>Client: Full ComplianceReport JSON
+    DASH & CURL -->|"HTTPS + JWT"| ALB
+    ALB --> MW_AUTH --> MW_RATE --> MW_SEC --> MW_VAL
+    MW_VAL --> R_EVAL & R_STATUS & R_REPORT & R_HEALTH
+    R_EVAL -->|"async dispatch"| DI --> ORCH
+    ORCH --> A1 & A2 & A3 & A4
+    A1 --> REG & BED
+    A2 --> WL & BED
+    A3 --> NEO & BED
+    A4 --> BED
+    ORCH -->|"audit event"| S3A
 ```
 
 ---
 
 ## 3. Database Design & Relational Storage (Current Implementation)
 
-### Schema Design Philosophy
+### 3.1 Hybrid Storage Architecture
 
-The system uses a **graph-first data model** rather than traditional relational normalization. However, understanding how this maps to relational concepts is critical for interview discussions:
+This system uses a **polyglot persistence** model rather than a single relational database:
 
-**Relational Equivalent (if implemented in SQL Server):**
+| Store | Engine | Purpose | Access Pattern |
+|-------|--------|---------|----------------|
+| Analytical warehouse | DuckDB | ELT staging, dbt transformations, seed data | Columnar scans, batch transforms |
+| Graph database | Neo4j 5 | Fraud network traversal, 2-hop queries | Cypher path queries, APOC procedures |
+| Audit log | Amazon S3 | Immutable hash-chain event log | Append-only, sequential reads |
+| Application state | In-memory (production: Redis/DynamoDB) | Evaluation lifecycle tracking | Key-value by evaluation_id |
 
-| Entity | Table | Primary Key | Indexes |
-|--------|-------|-------------|---------|
-| Customer | `dim_customer` | `customer_id` (UUID) | `national_id` (unique), `email` (B-tree), `address_hash` (B-tree) |
-| Address | `dim_address` | `address_hash` (MD5) | `normalized_address` (full-text) |
-| IP Address | `dim_ip_address` | `ip_address` (varchar) | Composite: `(ip_address, first_seen_at)` |
-| Phone Number | `dim_phone` | `phone_number` (E.164) | `phone_number` (unique) |
-| Evaluation | `fact_evaluation` | `evaluation_id` (UUID) | `customer_id` (FK), `created_at` (B-tree desc) |
-| Audit Log | `fact_audit_log` | `entry_id` (UUID) | `evaluation_id` (FK), `timestamp` (clustered desc) |
-| Watchlist Match | `bridge_watchlist_match` | `match_id` (UUID) | `customer_id`, `similarity_score` (desc) |
+### 3.2 Relational Schema: DuckDB Warehouse Layer
 
-### ELT Pipeline: dbt + DuckDB → Neo4j
+The dbt pipeline transforms raw CSV into graph-ready models using a **staging → marts** pattern:
 
-**Why dbt over traditional ETL (SSIS)?**
-
-| Aspect | SSIS (Traditional) | dbt (Modern) |
-|--------|-------------------|--------------|
-| Transformation Logic | GUI + C# scripts in packages | SQL + Jinja2 in version-controlled files |
-| Testing | Manual validation scripts | Built-in: unique, not_null, relationships, custom |
-| Versioning | Binary .dtsx packages | Git-native SQL files |
-| Dependency Management | Package references | `ref()` macro with DAG resolution |
-| Idempotence | Requires careful design | Materialization strategies (view, table, incremental) |
-| Environment Parity | Dev/Prod drift common | Profiles.yml per environment |
-
-### dbt Model Layers
-
-**Staging Layer** (`models/staging/`) — Materialized as views:
+**Staging Layer** (materialized as views):
 ```sql
--- stg_customers.sql: Clean, deduplicate, normalize
+-- stg_customers: Clean, deduplicate, compute hash keys
 SELECT DISTINCT
     customer_id,
     TRIM(full_name) AS full_name,
@@ -283,49 +253,62 @@ SELECT DISTINCT
     LOWER(TRIM(email)) AS email,
     phone,
     ip_address,
-    md5(LOWER(TRIM(address))) AS address_hash,  -- Deterministic dedup key
+    md5(LOWER(TRIM(address))) AS address_hash,  -- Deterministic join key
     CURRENT_TIMESTAMP AS loaded_at
-FROM {{ source('raw', 'customers') }}
+FROM raw.customers
 WHERE customer_id IS NOT NULL AND full_name IS NOT NULL
 ```
 
-**Marts Layer** (`models/marts/`) — Materialized as tables, graph-ready:
-- `nodes_customer` — Customer entity nodes
-- `nodes_address` — Address entity nodes (keyed by MD5 hash)
-- `nodes_ip` — IP address entity nodes
-- `nodes_phone` — Phone number entity nodes
-- `edges_shares_address` — Customer↔Customer via shared address
-- `edges_shares_ip` — Customer↔Customer via shared IP
-- `edges_shares_phone` — Customer↔Customer via shared phone
+**Marts Layer** (materialized as tables — graph nodes and edges):
 
-**Graph Edge Construction Pattern:**
-```sql
--- edges_shares_address.sql: Self-join on shared infrastructure
-SELECT
-    a.customer_id AS source_node_id,
-    b.customer_id AS target_node_id,
-    a.address_hash AS shared_address_id,
-    'SHARES_ADDRESS' AS relationship_type
-FROM {{ ref('stg_customers') }} a
-INNER JOIN {{ ref('stg_customers') }} b
-    ON a.address_hash = b.address_hash
-    AND a.customer_id < b.customer_id  -- Prevent duplicate/self edges
+| Model | Type | Description |
+|-------|------|-------------|
+| `nodes_customer` | Node | Customer entities with risk_flag |
+| `nodes_address` | Node | Unique addresses (by hash) |
+| `nodes_ip` | Node | Unique IP addresses |
+| `nodes_phone` | Node | Unique phone numbers |
+| `edges_shares_address` | Edge | Customer pairs sharing same address |
+| `edges_shares_ip` | Edge | Customer pairs sharing same IP |
+| `edges_shares_phone` | Edge | Customer pairs sharing same phone |
+
+### 3.3 Graph Data Model (Neo4j)
+
+```
+(:Customer {entity_id, full_name, date_of_birth, national_id, risk_flag})
+(:Address {entity_id, address_hash, normalized_address})
+(:IPAddress {entity_id, ip_address})
+(:PhoneNumber {entity_id, phone_number})
+(:WatchlistEntity {entity_id, source_list, sanctions_programs, risk_flag: "HIGH"})
+
+-[:SHARES_ADDRESS {shared_address_id, created_at}]->
+-[:SHARES_IP {shared_ip_id, created_at}]->
+-[:SHARES_PHONE {shared_phone_id, created_at}]->
+-[:REGISTERED_AT]->
+-[:USES_IP]->
+-[:HAS_PHONE]->
 ```
 
-### Data Warehousing Strategy (Traditional Context)
+**Indexing Strategy:**
+- Composite index on `(:Customer {entity_id})` — primary lookup
+- Full-text index on `(:Customer {full_name})` — fuzzy name matching
+- Index on `(:Address {address_hash})` — join key for edge materialization
+- Index on `(:WatchlistEntity {risk_flag})` — filtered traversal start points
 
-If discussing migration from a **Microsoft SQL Server Ecosystem**:
+### 3.4 Legacy Enterprise Comparison: SQL Server Ecosystem
 
-| Component | Traditional Stack | This Project's Equivalent |
-|-----------|------------------|---------------------------|
-| OLTP Store | SQL Server (normalized 3NF) | Not applicable (event-driven) |
-| Integration | SSIS packages (.dtsx) | dbt models with `ref()` DAG |
-| Warehouse | SQL Server (star schema) | DuckDB (columnar, in-process) |
-| Reporting | SSRS (.rdl reports) | Prometheus + Grafana dashboards |
-| Cubes | SSAS (MOLAP/Tabular) | Not applicable (real-time scoring) |
-| Scheduling | SQL Server Agent | dbt Cloud / Airflow / ECS scheduled tasks |
+If this system were implemented using a traditional Microsoft data stack:
 
-### DIAGRAM 3: Database Schema / ERD & Warehousing Architecture
+| Component | Legacy Tool | Role |
+|-----------|-------------|------|
+| ETL Pipeline | **SSIS** (Integration Services) | Data flow tasks: CSV → staging → dimensional model |
+| Warehouse | **SQL Server** | Star schema with customer dimension, fact tables for evaluations |
+| Reporting | **SSRS** (Reporting Services) | Compliance reports, risk dashboards, audit trail exports |
+| Job Scheduling | **SQL Server Agent** | Nightly batch jobs, watchlist refresh, data quality checks |
+| CDC | **SQL Server Change Tracking** | Incremental loads from source systems |
+
+**Why we moved away:** The legacy approach is batch-oriented (nightly), schema-rigid, and cannot support real-time graph traversal or LLM-augmented analysis. dbt provides version-controlled, testable transformations. DuckDB provides in-process analytical speed without server management.
+
+### 3.5 DIAGRAM 3: Data Model ERD & Warehouse Flow
 
 ```mermaid
 erDiagram
@@ -333,16 +316,29 @@ erDiagram
         string customer_id PK
         string full_name
         date date_of_birth
-        string national_id UK
+        string national_id
         string address
         string email
         string phone
         string ip_address
     }
 
+    STG_CUSTOMERS {
+        string customer_id PK
+        string full_name
+        date date_of_birth
+        string national_id
+        string address
+        string email
+        string phone
+        string ip_address
+        string address_hash
+        timestamp loaded_at
+    }
+
     NODES_CUSTOMER {
         string entity_id PK
-        string customer_id UK
+        string customer_id FK
         string full_name
         date date_of_birth
         string national_id
@@ -352,640 +348,379 @@ erDiagram
 
     NODES_ADDRESS {
         string entity_id PK
-        string address_hash UK
+        string address_hash
         string normalized_address
-        timestamp created_at
-    }
-
-    NODES_IP {
-        string entity_id PK
-        string ip_address UK
-        timestamp created_at
-    }
-
-    NODES_PHONE {
-        string entity_id PK
-        string phone_number UK
-        timestamp created_at
     }
 
     EDGES_SHARES_ADDRESS {
         string source_node_id FK
         string target_node_id FK
-        string shared_address_id FK
+        string shared_address_id
         string relationship_type
         timestamp created_at
     }
 
-    EDGES_SHARES_IP {
-        string source_node_id FK
-        string target_node_id FK
-        string shared_ip_id FK
-        string relationship_type
-        timestamp created_at
-    }
-
-    EDGES_SHARES_PHONE {
-        string source_node_id FK
-        string target_node_id FK
-        string shared_phone_id FK
-        string relationship_type
-        timestamp created_at
-    }
-
-    AUDIT_LOG {
-        string entry_id PK
-        string evaluation_id FK
-        string event_type
-        timestamp timestamp
-        string agent_name
-        string input_hash
-        string output_hash
-        int duration_ms
-        string model_identifier
-        int token_count_input
-        int token_count_output
-        string previous_hash
-        string entry_hash
-    }
-
-    EVALUATION {
-        string evaluation_id PK
-        string customer_id FK
-        string status
-        string current_stage
-        string final_decision
-        float composite_risk_score
-        timestamp created_at
-        timestamp updated_at
-        string correlation_id
-    }
-
-    RAW_CUSTOMERS ||--o{ NODES_CUSTOMER : "dbt staging"
-    RAW_CUSTOMERS ||--o{ NODES_ADDRESS : "dbt address_hash"
-    RAW_CUSTOMERS ||--o{ NODES_IP : "dbt ip_address"
-    RAW_CUSTOMERS ||--o{ NODES_PHONE : "dbt phone"
-    NODES_CUSTOMER ||--o{ EDGES_SHARES_ADDRESS : "source/target"
-    NODES_CUSTOMER ||--o{ EDGES_SHARES_IP : "source/target"
-    NODES_CUSTOMER ||--o{ EDGES_SHARES_PHONE : "source/target"
-    NODES_ADDRESS ||--o{ EDGES_SHARES_ADDRESS : "shared_address"
-    NODES_IP ||--o{ EDGES_SHARES_IP : "shared_ip"
-    NODES_PHONE ||--o{ EDGES_SHARES_PHONE : "shared_phone"
-    EVALUATION ||--o{ AUDIT_LOG : "evaluation_id"
-    NODES_CUSTOMER ||--o{ EVALUATION : "customer_id"
+    RAW_CUSTOMERS ||--|| STG_CUSTOMERS : "dbt: clean + hash"
+    STG_CUSTOMERS ||--|| NODES_CUSTOMER : "dbt: mart"
+    STG_CUSTOMERS ||--o{ NODES_ADDRESS : "dbt: distinct addresses"
+    NODES_CUSTOMER ||--o{ EDGES_SHARES_ADDRESS : "source_node_id"
+    NODES_CUSTOMER ||--o{ EDGES_SHARES_ADDRESS : "target_node_id"
+    NODES_ADDRESS ||--o{ EDGES_SHARES_ADDRESS : "shared_address_id"
 ```
 
 ```mermaid
 flowchart LR
-    subgraph ELT_PIPELINE["ELT Pipeline (dbt + DuckDB)"]
-        direction TB
-        RAW["Raw CSV Seeds<br/>(raw_customers.csv)"]
-        SEED["dbt seed<br/>(load to DuckDB)"]
-        STG["Staging Models<br/>(views: clean + dedup)"]
-        MART["Mart Models<br/>(tables: graph-ready)"]
-        TEST["dbt test<br/>(unique, not_null, FK)"]
+    subgraph Legacy["Legacy SQL Server Stack"]
+        SSIS["SSIS Package<br/>Extract → Transform → Load"]
+        SSDB[("SQL Server<br/>Star Schema")]
+        SSRS["SSRS Reports<br/>Compliance Dashboard"]
+        AGENT["SQL Agent<br/>Nightly Schedule"]
     end
 
-    subgraph GRAPH_LOAD["Graph Loading"]
-        EXPORT["Export mart tables"]
-        CYPHER["Cypher LOAD CSV<br/>or APOC import"]
-        NEO4J_DB["Neo4j 5<br/>Graph Database"]
+    subgraph Modern["Modern dbt + DuckDB Stack"]
+        SEED["dbt seed<br/>(CSV → DuckDB)"]
+        RUN["dbt run<br/>(staging → marts)"]
+        TEST["dbt test<br/>(unique, not_null, relationships)"]
+        DUCK[("DuckDB<br/>Columnar Analytics")]
+        NEO[("Neo4j 5<br/>Graph Store")]
     end
 
-    subgraph QUERY_TIME["Query-Time (Agent)"]
-        AGENT["Graph Analyst Agent"]
-        HOP["2-hop neighborhood<br/>MATCH (n)-[*1..2]-(m)"]
-        PATH["shortestPath<br/>extraction"]
-        RISK["Network Risk Score<br/>computation"]
-    end
+    SSIS -->|"replaced by"| SEED
+    SSDB -->|"replaced by"| DUCK
+    SSRS -->|"replaced by"| NEO
+    AGENT -->|"replaced by"| RUN
 
-    RAW --> SEED --> STG --> MART --> TEST
-    MART --> EXPORT --> CYPHER --> NEO4J_DB
-    AGENT --> HOP --> NEO4J_DB
-    AGENT --> PATH --> NEO4J_DB
-    HOP --> RISK
-    PATH --> RISK
+    SEED --> DUCK --> RUN --> TEST
+    RUN -->|"LOAD CSV"| NEO
 ```
 
 ---
 
 ## 4. Enterprise Scale-Out & Modern Cloud Transformation (AWS & Modern Stack)
 
-### Re-Architecture for Petabyte Scale & Real-Time AI Workloads
+### 4.1 AWS Infrastructure: Re-Platforming Strategy
 
-The current system is designed for single-instance deployment handling ~100 evaluations/minute. To scale to **petabyte-scale data** with **real-time AI workloads**, we re-architect using AWS managed services.
+The current system runs on Docker Compose locally. The production architecture targets **AWS ECS Fargate** with managed services:
 
-### 4.1 Cloud Platform (AWS) — Re-Platforming Strategy
+| Current (Local) | Production (AWS) | Rationale |
+|-----------------|------------------|-----------|
+| Docker Compose + Neo4j container | **Amazon Neptune** (or Neo4j Aura on AWS) | Managed graph DB with multi-AZ, automated backups, read replicas |
+| DuckDB (in-process) | **Amazon Redshift Serverless** | Petabyte-scale columnar analytics, pay-per-query |
+| FastAPI on localhost | **ECS Fargate** behind ALB | Serverless containers, auto-scaling, no instance management |
+| In-memory evaluation state | **Amazon DynamoDB** | Sub-ms key-value lookups, TTL for evaluation lifecycle |
+| Local filesystem audit | **Amazon S3** (Glacier IA) | Immutable, versioned, AES-256, compliance-grade retention |
+| Environment variables | **AWS Secrets Manager** + **Parameter Store** | Rotatable secrets, encrypted at rest, IAM-scoped access |
+| Amazon Bedrock (API) | **Amazon Bedrock** (private endpoint) | VPC endpoint, no data egress, model invocation logging |
 
-| Current Component | AWS Production Equivalent | Scaling Characteristics |
-|------------------|---------------------------|------------------------|
-| Local DuckDB | **Amazon Redshift Serverless** | Petabyte-scale columnar warehouse; auto-scaling RPU |
-| Neo4j Docker | **Amazon Neptune** (or Neo4j Aura) | Managed graph DB; read replicas; multi-AZ |
-| FastAPI on localhost | **AWS ECS Fargate** behind ALB | Auto-scaling (CPU 70% target); no instance management |
-| In-memory state | **Amazon ElastiCache (Redis)** | Evaluation state store; sub-ms latency |
-| S3 audit logs | **Amazon S3 + S3 Object Lock** | WORM compliance; lifecycle policies; cross-region replication |
-| Local file CSV | **Amazon S3 + AWS Glue** | Data lake ingestion; schema registry; partitioning |
-| Prometheus metrics | **Amazon CloudWatch + X-Ray** | Native integration; distributed tracing; alarm automation |
-| Bedrock (same) | **Amazon Bedrock** | Managed LLM inference; provisioned throughput for predictable latency |
+**Scaling Targets:**
+- 10,000 concurrent evaluations
+- < 120 second p99 latency per evaluation
+- 99.9% availability (multi-AZ deployment)
+- Petabyte-scale historical graph (Neptune with read replicas)
 
-### 4.2 Data Transformation & Modeling: dbt at Scale
+### 4.2 Data Transformation: dbt at Scale
 
-**dbt Cloud (Enterprise) or dbt-core on ECS:**
+**Current:** `dbt-core` + `dbt-duckdb` for local development and CI testing.
 
-- **Incremental Materializations**: For streaming customer data, use `incremental` strategy with `unique_key` to avoid full-table rebuilds
-- **Snapshots (SCD Type 2)**: Track customer attribute changes over time (address changes trigger new edge evaluation)
-- **Freshness Checks**: `source_freshness` ensures upstream data is within SLA
-- **Slim CI**: Only run modified models + downstream dependents on PRs
-- **dbt Mesh**: For multi-team ownership, publish marts as cross-project references
+**Production Evolution:**
 
-```yaml
-# Incremental model for high-volume streaming
-{{ config(materialized='incremental', unique_key='customer_id') }}
-SELECT * FROM {{ source('streaming', 'onboarding_events') }}
-{% if is_incremental() %}
-WHERE event_timestamp > (SELECT MAX(event_timestamp) FROM {{ this }})
-{% endif %}
-```
+| Tier | Tool | Purpose |
+|------|------|---------|
+| Dev/CI | dbt-core + dbt-duckdb | Fast local iteration, PR-level testing |
+| Staging | dbt-core + dbt-redshift | Integration testing against Redshift Serverless |
+| Production | **dbt Cloud** or **AWS MWAA (Airflow)** | Scheduled runs, data freshness SLAs, lineage tracking |
 
-### 4.3 Graph Database Layer: Neo4j / Amazon Neptune at Scale
+**dbt Design Patterns Applied:**
+- **Staging models:** One-to-one with source tables; deduplication, type casting, hash key generation
+- **Mart models:** Business-entity-aligned (nodes and edges for graph); materialized as tables for bulk load performance
+- **Tests:** `unique`, `not_null`, `relationships`, custom generic tests for data quality
+- **Incremental models** (planned): For production volumes, switch marts to `incremental` materialization with `merge` strategy
+- **Exposures:** Document downstream Neo4j graph consumption as dbt exposures
 
-**Amazon Neptune Considerations:**
+### 4.3 Graph Analytics Layer: Neo4j / Amazon Neptune
 
-| Feature | Neo4j (Current) | Amazon Neptune (Production) |
-|---------|-----------------|----------------------------|
-| Query Language | Cypher | Gremlin (TinkerPop) or openCypher |
-| Scaling | Vertical (single instance) | Read replicas (up to 15); storage auto-scales to 128TB |
-| HA | Manual clustering | Multi-AZ with automatic failover |
-| Bulk Load | Cypher LOAD CSV, APOC | Neptune Bulk Loader from S3 (CSV/JSON) |
-| ACID | Full ACID | Full ACID per-request |
-| Index | Schema indexes, full-text | Auto-indexed; SPARQL/Gremlin optimized |
+**Current Implementation:**
+- Neo4j 5 Community Edition (Docker) with APOC plugin
+- Parameterized Cypher queries (no string interpolation — security enforced)
+- Read-only access pattern via `GraphDatabasePort` abstraction
+- 2-hop maximum traversal depth (configurable, capped for performance)
 
-**Graph Data Modeling for Fraud Networks:**
+**Production Graph at Scale:**
 
 ```
-(:Customer {customer_id, full_name, risk_flag})
-    -[:REGISTERED_AT]->(:Address {address_hash, normalized})
-    -[:CONNECTED_FROM]->(:IPAddress {ip, geo_location})
-    -[:USES_PHONE]->(:PhoneNumber {e164_number})
-    -[:SHARES_ADDRESS]->(:Customer)  // Derived edge
-    -[:SHARES_IP]->(:Customer)       // Derived edge
-    -[:FLAGGED_ON]->(:WatchlistEntity {source, severity})
+Petabyte-Scale Graph Strategy:
+├── Amazon Neptune (primary)
+│   ├── Writer instance: bulk loads from dbt marts (nightly)
+│   ├── Reader instances (2+): real-time agent queries
+│   ├── Neptune ML: anomaly detection on graph structure changes
+│   └── Neptune Streams: CDC to downstream consumers
+├── Graph Partitioning
+│   ├── Geographic sharding (regional subgraphs)
+│   ├── Temporal partitioning (active vs. archived entities)
+│   └── Hot-path caching (Redis Graph for frequently-queried neighborhoods)
+└── Query Optimization
+    ├── Materialized 2-hop views (precomputed, refreshed hourly)
+    ├── Bloom filter on entity_id for existence checks
+    └── Query timeout: 5s hard limit with circuit breaker
 ```
 
-**Key Cypher Patterns (Interview-Ready):**
+### 4.4 Vector Infrastructure: Embeddings & Semantic Search
 
-```cypher
--- 2-hop neighborhood from customer's address
-MATCH (c:Customer {customer_id: $customer_id})-[:REGISTERED_AT]->(a:Address)
-      -[*1..2]-(neighbor)
-WHERE neighbor:WatchlistEntity OR neighbor.risk_flag = 'HIGH'
-RETURN neighbor, length(shortestPath((c)-[*]-(neighbor))) AS distance
+The GraphRAG pattern can be enhanced with vector embeddings for semantic entity resolution:
 
--- Fraud ring detection (connected component)
-MATCH (c:Customer)-[:SHARES_ADDRESS|SHARES_IP|SHARES_PHONE*1..3]-(ring_member)
-WHERE ring_member.risk_flag IN ['HIGH', 'SANCTIONED']
-WITH c, collect(DISTINCT ring_member) AS ring_members
-WHERE size(ring_members) >= 2
-RETURN c.customer_id, ring_members
-```
+| Component | Technology | Use Case |
+|-----------|-----------|----------|
+| Embedding generation | Amazon Bedrock (Titan Embeddings v2) | Convert customer names, addresses to 1536-dim vectors |
+| Vector store | **Amazon OpenSearch Serverless** (vector engine) | Approximate nearest-neighbor search for fuzzy entity matching |
+| Alternative vector DB | **pgvector** (Aurora PostgreSQL) | Integrated vector + relational queries in single engine |
+| RAG retrieval | Custom retriever via `httpx` | Feed graph context + vector matches into LLM prompts |
 
-### 4.4 Vector Infrastructure: Embeddings & RAG Patterns
-
-**Use Cases for Vector Store in KYC:**
-
-1. **Semantic Name Matching**: Embed customer names using sentence transformers; fuzzy match against watchlists with cosine similarity (handles transliterations, aliases, spelling variants)
-2. **Document Embedding**: Embed onboarding documents (ID scans, utility bills) for similarity search against known fraudulent documents
-3. **RAG for Report Generation**: Retrieve relevant compliance precedents and regulatory guidance for report drafting agent
-4. **Anomaly Detection**: Embed behavioral patterns; flag outliers in vector space
-
-**Technology Options:**
-
-| Vector Store | Strengths | Use Case Fit |
-|-------------|-----------|--------------|
-| **pgvector** (Aurora) | Integrated with existing RDS; HNSW/IVFFlat indexes | Name matching alongside relational metadata |
-| **Amazon OpenSearch** (k-NN) | Managed; combines full-text + vector search | Watchlist search with hybrid scoring |
-| **Pinecone** | Purpose-built; serverless; metadata filtering | High-volume real-time name screening |
-| **Amazon Bedrock Knowledge Bases** | Managed RAG; auto-chunking; S3 source sync | Compliance document retrieval for report drafter |
-
-**Architecture Pattern: Hybrid GraphRAG + VectorRAG**
+**RAG Architecture for KYC:**
 
 ```
-Customer Name → Embedding Model (Titan/Cohere) → Vector Search (top-K watchlist matches)
-                                                         ↓
-                                              Candidate Entities
-                                                         ↓
-Customer → Graph Traversal (Neo4j 2-hop) → Structural Relationships
-                                                         ↓
-                                              Combined Risk Signal
-                                                         ↓
-                                         LLM Reasoning (Bedrock Claude)
-                                                         ↓
-                                            Explainable Risk Assessment
+Customer Onboarding Payload
+    │
+    ├─► Embed(full_name) → Vector Search → Top-K similar names in watchlists
+    ├─► Embed(address) → Vector Search → Top-K similar addresses in network
+    │
+    ├─► Graph Traversal (Neo4j) → Structural connections (exact matches)
+    │
+    └─► LLM Context Assembly:
+         - Vector-matched entities (semantic similarity > 0.85)
+         - Graph-connected entities (structural paths ≤ 2 hops)
+         - Watchlist entries (exact + fuzzy matches)
+         │
+         └─► Strands Agent tool execution → Risk assessment with citations
 ```
 
-### 4.5 Python Backend Ecosystem: Key Libraries
+**Why OpenSearch over Pinecone/Milvus?**
+- AWS-native: VPC integration, IAM auth, no data egress
+- Serverless: No cluster management for variable workloads
+- Hybrid search: Combine BM25 (keyword) + kNN (vector) in single query
+- Cost: Pay-per-OCU, scales to zero during off-hours
 
-| Library | Role in Production System |
-|---------|--------------------------|
-| **FastAPI** | Async HTTP layer; automatic OpenAPI docs; dependency injection |
-| **Pydantic v2** | Data validation at every boundary; 5-50x faster than v1 (Rust core) |
-| **pydantic-settings** | 12-factor app config from env vars with type safety |
-| **LangGraph** | Deterministic agent orchestration; checkpointing; human-in-the-loop |
-| **Strands Agents SDK** | Tool-use agents with @tool decorator; model-agnostic |
-| **httpx** | Async HTTP client for external APIs (replaces requests) |
-| **boto3** | AWS SDK for Bedrock, S3, Neptune interactions |
-| **neo4j** (driver) | Official async Neo4j Python driver with connection pooling |
-| **duckdb** | In-process OLAP engine; Pandas integration; zero-copy Arrow |
-| **structlog** | Structured JSON logging with context binding (correlation IDs) |
-| **prometheus-client** | Metrics exposition for Grafana dashboards |
-| **python-jose** | JWT token creation/validation with cryptography backend |
-| **Hypothesis** | Property-based testing; finds edge cases humans miss |
-| **pytest-archon** | Architecture boundary enforcement via import analysis |
+### 4.5 Python Backend Ecosystem
 
-**For PySpark at Scale (Data Lake Processing):**
+| Library | Role in System | Why This Choice |
+|---------|---------------|-----------------|
+| **FastAPI** | Async HTTP framework | Native Pydantic v2, OpenAPI spec generation, dependency injection |
+| **Pydantic v2** | All data contracts (strict=True) | Rust-core validation, 5-50x faster than v1, `model_validate_json` |
+| **LangGraph** | Orchestration state machine | Typed state, conditional edges, retry/timeout built-in, checkpointing |
+| **Strands Agents SDK** | Worker agent runtime | @tool decorator pattern, streaming, multi-model support |
+| **httpx** | Async HTTP client | Connection pooling, timeout cascade, HTTP/2 support |
+| **structlog** | Structured logging | JSON output, context binding, correlate by evaluation_id |
+| **boto3** | AWS SDK | Bedrock model invocation, S3 audit writes, Secrets Manager |
+| **neo4j** (driver) | Graph DB client | Official async driver, connection pooling, transaction management |
+| **duckdb** | Embedded analytics | Zero-copy, vectorized execution, Pandas interop |
+| **Hypothesis** | Property-based testing | Shrinking, reproducible seeds, strategy composition |
+| **prometheus-client** | Metrics export | Histogram for latencies, counters for decisions, gauges for active evals |
 
-```python
-# If migrating DuckDB warehouse to Spark for petabyte scale
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import md5, lower, trim, col
-
-spark = SparkSession.builder.appName("kyc-elt").getOrCreate()
-
-# Equivalent of stg_customers dbt model at scale
-customers = (
-    spark.read.parquet("s3://kyc-data-lake/raw/customers/")
-    .dropDuplicates(["customer_id"])
-    .withColumn("address_hash", md5(lower(trim(col("address")))))
-    .withColumn("email", lower(trim(col("email"))))
-)
-
-# Equivalent of edges_shares_address (self-join on shared infra)
-edges = (
-    customers.alias("a")
-    .join(customers.alias("b"), "address_hash")
-    .filter(col("a.customer_id") < col("b.customer_id"))
-    .select(
-        col("a.customer_id").alias("source_node_id"),
-        col("b.customer_id").alias("target_node_id"),
-        col("a.address_hash").alias("shared_address_id"),
-    )
-)
-```
-
-### Complete AWS Production Architecture Diagram
+### 4.6 Production AWS Architecture Diagram
 
 ```mermaid
 flowchart TB
-    subgraph CLIENT["Client Layer"]
-        WEB["Compliance Dashboard (React)"]
-        API_CLIENT["Internal Systems / Batch API"]
+    subgraph VPC["AWS VPC (Multi-AZ)"]
+        subgraph Public["Public Subnet"]
+            ALB["Application Load Balancer<br/>TLS 1.3 · WAF · Health Checks"]
+        end
+
+        subgraph Private["Private Subnet (AZ-a + AZ-b)"]
+            ECS["ECS Fargate Cluster<br/>Auto-scaling: CPU target 70%<br/>Min: 2 · Max: 20 tasks"]
+            
+            subgraph Services["Fargate Tasks"]
+                API_SVC["KYC API Service<br/>(FastAPI + Uvicorn)"]
+                WORKER["Evaluation Workers<br/>(LangGraph + Strands)"]
+            end
+        end
+
+        subgraph Data["Data Subnet"]
+            NEPTUNE[("Amazon Neptune<br/>Writer + 2 Readers<br/>Multi-AZ")]
+            REDSHIFT[("Redshift Serverless<br/>dbt Marts")]
+            DYNAMO[("DynamoDB<br/>Evaluation State<br/>TTL: 7 days")]
+            OPENSEARCH[("OpenSearch Serverless<br/>Vector Engine<br/>1536-dim embeddings")]
+        end
     end
 
-    subgraph EDGE["Edge / Load Balancing"]
-        WAF["AWS WAF<br/>(OWASP, geo-blocking)"]
-        ALB["Application Load Balancer<br/>(TLS termination, health checks)"]
+    subgraph External["AWS Managed Services"]
+        BEDROCK["Amazon Bedrock<br/>Claude · Titan Embeddings<br/>VPC Endpoint"]
+        S3["Amazon S3<br/>Audit Logs (Glacier IA)<br/>Raw Data (Standard)"]
+        SECRETS["Secrets Manager<br/>DB Credentials · API Keys"]
+        CW["CloudWatch<br/>Logs · Metrics · Alarms"]
+        ECR["ECR<br/>Container Registry"]
     end
 
-    subgraph COMPUTE["Compute (ECS Fargate)"]
-        SVC_API["API Service<br/>(FastAPI × N replicas)<br/>Auto-scale: CPU 70%"]
-        SVC_WORKER["Worker Service<br/>(LangGraph Orchestrator)<br/>Auto-scale: queue depth"]
+    subgraph CI["CI/CD (GitHub Actions)"]
+        GH["GitHub Actions<br/>Build · Test · Deploy"]
     end
 
-    subgraph AI["AI / ML Layer"]
-        BEDROCK["Amazon Bedrock<br/>(Claude Sonnet 4 / Titan)"]
-        EMBED["Bedrock Embeddings<br/>(Titan Embed v2)"]
-        KB["Bedrock Knowledge Base<br/>(Compliance docs RAG)"]
-    end
-
-    subgraph DATA["Data Layer"]
-        NEPTUNE["Amazon Neptune<br/>(Graph DB, Multi-AZ)<br/>Read Replicas × 3"]
-        REDSHIFT["Amazon Redshift Serverless<br/>(Warehouse, auto-scale RPU)"]
-        REDIS["ElastiCache Redis<br/>(State store, rate limiting)"]
-        OPENSEARCH["Amazon OpenSearch<br/>(Vector + Full-text search)"]
-    end
-
-    subgraph STORAGE["Storage Layer"]
-        S3_RAW["S3: Raw Data Lake<br/>(Parquet, partitioned)"]
-        S3_AUDIT["S3: Audit Logs<br/>(Object Lock, WORM)"]
-        S3_MODELS["S3: dbt Artifacts<br/>(manifest, catalog)"]
-    end
-
-    subgraph ORCHESTRATION["Data Orchestration"]
-        GLUE["AWS Glue<br/>(Catalog + ETL Jobs)"]
-        MWAA["Amazon MWAA (Airflow)<br/>(dbt orchestration)"]
-        STEP["Step Functions<br/>(Batch evaluation pipeline)"]
-    end
-
-    subgraph OBSERVE["Observability"]
-        CW["CloudWatch Logs + Metrics"]
-        XRAY["AWS X-Ray<br/>(Distributed Tracing)"]
-        GRAFANA["Amazon Managed Grafana"]
-    end
-
-    subgraph SECURITY["Security & Compliance"]
-        IAM["IAM Roles<br/>(Least privilege)"]
-        KMS["KMS<br/>(Encryption at rest)"]
-        SECRETS["Secrets Manager<br/>(API keys, DB creds)"]
-        GUARDDUTY["GuardDuty<br/>(Threat detection)"]
-    end
-
-    WEB & API_CLIENT --> WAF --> ALB
-    ALB --> SVC_API
-    SVC_API --> REDIS
-    SVC_API --> SVC_WORKER
-    SVC_WORKER --> BEDROCK & EMBED & KB
-    SVC_WORKER --> NEPTUNE
-    SVC_WORKER --> OPENSEARCH
-    SVC_WORKER --> S3_AUDIT
-    MWAA --> GLUE --> S3_RAW --> REDSHIFT
-    REDSHIFT --> NEPTUNE
-    SVC_API & SVC_WORKER --> CW & XRAY
-    CW --> GRAFANA
-    IAM --> SVC_API & SVC_WORKER
-    KMS --> S3_AUDIT & NEPTUNE & REDSHIFT
-    SECRETS --> SVC_WORKER
+    ALB --> API_SVC
+    API_SVC --> WORKER
+    WORKER --> NEPTUNE & BEDROCK & DYNAMO & OPENSEARCH
+    WORKER --> S3
+    ECS --> SECRETS
+    ECS --> CW
+    GH -->|"push image"| ECR -->|"pull"| ECS
+    REDSHIFT -->|"UNLOAD → LOAD"| NEPTUNE
 ```
 
 ---
 
 ## 5. Advanced Interview Scenarios & Edge Cases (Q&A Appendix)
 
-### Category A: Architecture & Design Patterns
+### Q1: "How do you handle schema evolution when the graph model changes?"
 
-**Q: Why Hexagonal Architecture over Clean Architecture or traditional layered?**
+**Answer:** Schema evolution in a graph database is more forgiving than relational systems because Neo4j is schema-optional. Our strategy:
 
-A: Hexagonal (Ports & Adapters) gives us the strongest isolation guarantees for a system where infrastructure components change frequently. We swap between Neo4j (dev) and Neptune (prod), between Bedrock and OpenAI-compatible endpoints, between DuckDB (dev) and Redshift (prod). The port interfaces remain stable while adapters are swapped via dependency injection. Clean Architecture is conceptually similar but Hexagonal's explicit port/adapter vocabulary makes boundary enforcement testable — we have 7 architecture tests using pytest-archon that verify import boundaries on every PR.
-
-**Q: How do you ensure Decision Determinism?**
-
-A: Three mechanisms:
-1. All LLM calls use `temperature=0.0` — eliminates sampling randomness
-2. The composite risk score is a pure mathematical function with no side effects
-3. The decision engine uses deterministic threshold comparison (no random tiebreakers)
-4. Property-based tests (Hypothesis) verify: `∀ inputs: evaluate_decision(inputs) == evaluate_decision(inputs)` across 1000+ examples
-
-**Q: How does the state machine handle partial failures?**
-
-A: LangGraph conditional edges implement per-stage retry logic:
-- Identity verification: up to 3 retries on "ambiguous" status
-- Sanctions screening: up to 3 retries on "screening_ambiguous"
-- If retries exhausted → route to "escalate" → human review
-- If any agent raises `AgentTimeoutError` → circuit breaker records failure → escalate
-- The `KYCState` object carries `retry_count_identity` and `retry_count_sanctions` as bounded integers (0-3)
-
-**Q: Explain the audit trail hash chain (ISO 27001).**
-
-A: Each `AuditLogEntry` contains:
-- `previous_hash`: SHA-256 of the preceding entry (or "GENESIS" for first)
-- `entry_hash`: SHA-256 of (evaluation_id + event_type + timestamp + input_hash + output_hash + previous_hash)
-- Written to S3 with Object Lock (WORM) — physically immutable
-- Any tampering breaks the chain: `hash(entry[n]) != entry[n+1].previous_hash`
-- Compliance auditors can verify the entire chain mathematically
+1. **Forward-compatible node labels:** New properties added as nullable fields; existing queries continue working.
+2. **dbt model versioning:** When a mart model changes shape (e.g., adding a new edge type), we create a new versioned model (`edges_shares_device_v2`) and run both in parallel during migration.
+3. **Graph migration scripts:** APOC procedures handle bulk property additions or label changes: `CALL apoc.periodic.iterate("MATCH (c:Customer) RETURN c", "SET c.risk_tier = 'UNSCORED'", {batchSize:10000})`.
+4. **Pydantic schema versioning:** Domain schemas use discriminated unions for backward compatibility. Old API responses still validate.
+5. **Blue-green graph loads:** During major schema changes, load into a secondary Neptune cluster, validate with integration tests, then swap DNS.
 
 ---
 
-### Category B: Data Engineering & Pipeline Design
+### Q2: "What happens if the LLM hallucinates a sanctions match?"
 
-**Q: How do you handle schema evolution in the dbt pipeline?**
+**Answer:** The system is designed to be resilient to LLM hallucination through multiple guardrails:
 
-A: Multiple strategies:
-1. **Backward-compatible changes** (new columns): Add with `DEFAULT NULL`, no breaking changes downstream
-2. **Breaking changes** (renamed/removed columns): Version the model (`v2_nodes_customer`), deprecate old with `deprecation_date` in schema.yml
-3. **dbt snapshots**: SCD Type 2 for slowly changing dimensions (customer address history)
-4. **Contract enforcement**: dbt contracts (v1.5+) with `columns.data_type` and `constraints` prevent schema drift
-5. **CI check**: `dbt build --select state:modified+` in PRs ensures no downstream breakage
-
-**Q: DuckDB vs. Redshift vs. BigQuery — why DuckDB for dev?**
-
-A: DuckDB provides:
-- Zero-infrastructure local development (single file or in-memory)
-- Full SQL compatibility with analytical workloads (columnar, vectorized)
-- dbt-duckdb adapter gives identical SQL semantics to production warehouse
-- Sub-second query times for development datasets (<1M rows)
-- No cloud cost during development iteration
-
-For production (>1B rows), Redshift Serverless provides:
-- Automatic scaling (RPU-based, scales to zero)
-- Concurrency scaling for burst workloads
-- Federated queries to S3 data lake (Spectrum)
-- Native ML inference with Bedrock integration
-
-**Q: How do you ensure ELT idempotence?**
-
-A: Three guarantees:
-1. **Staging views** use `SELECT DISTINCT` with deterministic dedup keys (`customer_id`)
-2. **Mart tables** use full-refresh materialization (default) — `DROP TABLE IF EXISTS; CREATE TABLE AS SELECT`
-3. **Address hashes** use `md5(LOWER(TRIM(address)))` — same input always produces same hash
-4. Property test verifies: `∀ raw_data: dbt_run(raw_data) == dbt_run(raw_data)` (Hypothesis)
-
-**Q: How would you handle real-time streaming vs. batch?**
-
-A: Current system is batch-triggered (API call → evaluate). For real-time:
-1. **Amazon Kinesis Data Streams** for ingestion (customer onboarding events)
-2. **Kinesis Data Firehose** → S3 (micro-batches every 60s)
-3. **dbt incremental models** process only new records (`WHERE event_ts > max(this.event_ts)`)
-4. **Neptune Streams** for change data capture on graph mutations
-5. **EventBridge** triggers re-evaluation when graph topology changes (new edge = new risk)
+1. **LLM decisions are advisory, not authoritative.** The decision engine (`evaluate_decision`) uses only structured, validated data from Pydantic models — not raw LLM text.
+2. **Tool-constrained agents:** Strands agents can only act via registered @tool functions. The Graph Analyst cannot fabricate a path — it must return data from an actual Neo4j query.
+3. **Score bounds enforcement:** Hypothesis property tests verify that `compute_composite_risk_score` always returns `[0.0, 1.0]` regardless of inputs.
+4. **Determinism property:** Same `KYCState` inputs → same decision output, verified across 1000 Hypothesis examples.
+5. **Audit trail with source tracing:** Every LLM assertion in the compliance report is traced back to a specific graph node or watchlist entry. If the source doesn't exist in Neo4j, the assertion is flagged.
 
 ---
 
-### Category C: AI/ML Infrastructure & LLM Operations
+### Q3: "How do you handle data drift in sanctions lists?"
 
-**Q: How do you prevent prompt injection in a multi-agent system?**
+**Answer:**
 
-A: Defense-in-depth with 4 layers:
-1. **API layer**: Regex scanner checks 10+ known injection patterns before payload reaches agents
-2. **Input sanitization**: Remove control characters, null bytes, Unicode direction overrides
-3. **Agent constraints**: Strands agents have tool-level restrictions (read-only Cypher whitelist)
-4. **Output validation**: All agent responses must validate against Pydantic strict schemas — malformed LLM output is rejected, not propagated
-
-Security tests verify all patterns are caught (adversarial test suite runs on every PR).
-
-**Q: Explain the token budget mechanism.**
-
-A: `AppConfig.token_budget_per_evaluation = 50,000 tokens`. Enforced by:
-1. `LLMInvocationMetadata` tracks `token_count_input + token_count_output` per call
-2. Orchestrator accumulates token usage across all agents in `KYCState`
-3. If cumulative usage exceeds budget → `TokenBudgetExceededError` → evaluation escalated
-4. Prevents runaway costs from LLM loops or adversarial inputs
-5. Prometheus counter `kyc_token_usage_total` enables cost dashboards
-
-**Q: How do you handle LLM model versioning and reproducibility?**
-
-A: ISO 42001 compliance requires full traceability:
-1. Every LLM call records `ExplainabilitySchema`:
-   - `prompt_template_hash` (SHA-256 of the template)
-   - `model_identifier` + `model_version`
-   - `temperature_setting` (always 0.0 for determinism)
-   - `token_count_input/output`
-   - `trace_mapping` (which source data nodes influenced the prompt)
-2. Audit log stores input/output hashes — can verify exact reproduction
-3. Model version pinned in `AppConfig` — changes require explicit PR + review
-
-**Q: What happens if Bedrock is down? How do you handle LLM provider failover?**
-
-A: Circuit breaker pattern with fallback:
-1. `BedrockAdapter` circuit breaker: 5 consecutive failures → OPEN (reject all calls for 60s)
-2. On OPEN → orchestrator routes to `OpenAIAdapter` (fallback provider)
-3. HALF_OPEN after 60s → single test call → success = CLOSED, failure = re-OPEN
-4. If ALL providers down → `LLMConnectionError` → evaluation ESCALATE_TO_HUMAN_REVIEW
-5. Metric: `kyc_circuit_breaker_state` gauge alerts ops team instantly
+- **Scheduled refresh:** Watchlist adapters pull from OFAC/EU/UN APIs on a configurable schedule (default: daily).
+- **Version fingerprinting:** Each watchlist snapshot has a SHA-256 hash stored in S3. The audit log records which version was active during each evaluation.
+- **Retroactive re-screening:** When a new watchlist version arrives, a batch job identifies all evaluations from the past 30 days that now have new matches and triggers re-evaluation or compliance alerts.
+- **Drift detection:** Compare match counts between consecutive watchlist versions. If delta > 10% of entity count, alert the compliance team before activating.
 
 ---
 
-### Category D: Scale, High Availability & Failure Modes
+### Q4: "How would you handle a fraud ring of 10,000+ nodes?"
 
-**Q: How does the system handle 10,000 concurrent evaluations?**
+**Answer:** The 2-hop constraint is intentional — it limits blast radius and query cost. For large rings:
 
-A: Horizontal scaling strategy:
-1. **ECS Fargate auto-scaling**: Scale API service replicas based on ALB request count
-2. **Worker service**: Scale based on SQS queue depth (evaluations queued)
-3. **Neptune read replicas** (×3): Distribute graph queries across replicas
-4. **Redis**: Evaluation state stored in Redis (not in-memory) for shared access
-5. **Rate limiting**: 100 req/min per client; burst allowance via token bucket
-6. **Backpressure**: If queue depth > threshold, API returns 429 (Too Many Requests)
-
-**Q: What's your disaster recovery strategy?**
-
-A: RTO < 15 minutes, RPO < 1 minute:
-1. **Neptune**: Multi-AZ with automatic failover (data replicated synchronously)
-2. **S3 audit logs**: Cross-region replication (us-east-1 → eu-west-1)
-3. **Redshift**: Automatic snapshots every 8 hours; cross-region copy
-4. **ECS**: Multi-AZ task placement; unhealthy containers auto-replaced
-5. **Infrastructure as Code**: Full Terraform state — rebuild from scratch in <30 minutes
-
-**Q: How do you handle data drift and model degradation?**
-
-A: Continuous monitoring:
-1. **Feature drift**: Monitor distribution of identity_confidence, sanctions_score, network_risk over time (CloudWatch custom metrics)
-2. **Decision distribution**: Alert if DENY rate changes >2σ from rolling 7-day mean
-3. **Latency drift**: Histogram `kyc_evaluation_duration_seconds` — alert on p99 > 90s
-4. **Schema drift**: dbt `source_freshness` + dbt contracts detect upstream changes
-5. **Retraining signal**: If ESCALATE rate exceeds 15% → review thresholds and retrain embedding models
-
-**Q: How would you handle a data breach or compromised graph database?**
-
-A: Incident response:
-1. **Detection**: GuardDuty alerts on unusual Neptune access patterns
-2. **Containment**: IAM policy update to revoke compromised credentials (< 5 min)
-3. **Assessment**: S3 audit log chain verification — identify which evaluations were affected
-4. **Recovery**: Neptune point-in-time restore to pre-breach state
-5. **Notification**: Regulatory reporting within 72 hours (GDPR) using audit trail evidence
-6. **Prevention**: Rotate all credentials; review least-privilege policies; add Neptune VPC endpoint
+1. **Incremental discovery:** Initial 2-hop query finds the ring perimeter. A background job then expands the full ring using BFS with depth limit of 5.
+2. **Subgraph extraction:** For rings exceeding 1000 nodes, extract the subgraph into a separate analysis partition. Apply community detection (Louvain algorithm via Neptune ML or Neo4j GDS).
+3. **Risk propagation:** Instead of re-traversing for each new customer, precompute "risk proximity scores" for all nodes adjacent to known fraud rings. Store as materialized property on each node.
+4. **Query timeout + fallback:** If a 2-hop query returns > 100 nodes within the timeout, the agent falls back to checking only direct (1-hop) connections to HIGH-severity flagged entities.
 
 ---
 
-### Category E: Curveball Questions & Architectural Pivots
+### Q5: "What's your testing strategy for non-deterministic LLM outputs?"
 
-**Q: "What if we need to support real-time graph updates as new customers onboard?"**
+**Answer:**
 
-A: Neptune Streams + EventBridge:
-1. Enable Neptune Streams (change data capture on graph mutations)
-2. Lambda function triggered on new edge creation
-3. If new edge connects to flagged entity → trigger re-evaluation of affected customers
-4. Challenge: preventing evaluation storms (one new node could trigger 100s of re-evaluations)
-5. Solution: Debounce with SQS FIFO (group by customer_id, 5-minute deduplication window)
-
-**Q: "How would you add explainable AI for regulators who don't trust black-box LLMs?"**
-
-A: Already built in (ISO 42001):
-1. Every LLM assertion maps back to source data nodes via `trace_mapping`
-2. Compliance report contains `source_references` per section
-3. The Graph Analyst's risk score is mathematically derived (not LLM-generated):
-   - `network_risk = avg_hop_risk × 0.4 + max_severity × 0.4 + path_count_factor × 0.2`
-4. LLMs are used for narrative generation, not decision-making. The decision engine is pure deterministic code.
-5. "Show me why": Given evaluation_id → retrieve all paths from Neo4j → visualize graph → show which shared infrastructure triggered DENY
-
-**Q: "What if the graph has 1 billion nodes? How does 2-hop traversal scale?"**
-
-A: Graph query optimization:
-1. **Index everything**: Entity_id, label-specific property indexes
-2. **Bounded traversal**: `[*1..2]` limits explosion; never allow open-ended traversal
-3. **Result limiting**: `LIMIT 100` on neighbor queries; prioritize flagged entities
-4. **Graph partitioning** (Neptune): Partition by geographic region or time window
-5. **Materialized views**: Pre-compute "customers within 2 hops of flagged entities" as a background job; store in a `high_risk_proximity` table
-6. **Alternative**: For >100M nodes, consider Apache TinkerPop with SparkGraphComputer for batch 2-hop computation, serve results via Redis
-
-**Q: "Why not use LangChain instead of Strands + LangGraph?"**
-
-A: Separation of concerns:
-1. **LangGraph** handles orchestration (state machine, conditional routing, retries) — it's deterministic infrastructure
-2. **Strands SDK** handles tool-use agents (LLM decides which tools to call) — it's the agentic reasoning layer
-3. LangChain conflates both into one framework, creating tight coupling
-4. Strands @tool pattern is simpler, testable in isolation, and model-agnostic
-5. LangGraph's StateGraph gives us checkpoint/resume, human-in-the-loop, and visualization for free
-
-**Q: "How do you test a system that depends on LLMs (non-deterministic by nature)?"**
-
-A: Multi-strategy testing approach:
-1. **Unit tests**: Mock LLM ports; verify business logic independently (pure functions)
-2. **Contract tests**: Verify agent outputs conform to Pydantic schemas regardless of content
-3. **Property tests**: `temperature=0.0` makes outputs deterministic for same inputs
-4. **Snapshot tests**: Golden-file responses for known inputs; alert on drift
-5. **Integration tests**: Real LLM calls in CI (nightly, not per-PR) with budget caps
-6. **Architecture tests**: Verify agents only call allowed ports (never infrastructure directly)
-
-**Q: "Walk me through a fraud ring detection scenario end-to-end."**
-
-A: Complete walkthrough:
-
-1. **Ingestion**: Customer "Alice" submits onboarding via POST /evaluate
-   - Address: "123 Main St, Apt 4, New York"
-   - IP: 192.168.1.100, Phone: +14155551234
-
-2. **dbt Transform**: Address hashed to `md5("123 main st, apt 4, new york")` → `a7f3...`
-
-3. **Graph State**: Neo4j already contains:
-   - Bob (flagged: SANCTIONS_HIT) registered at same address hash `a7f3...`
-   - Charlie (flagged: FRAUD_RING) connected from same IP 192.168.1.100
-
-4. **Identity Verifier**: Alice's documents validate → confidence 0.92 (HIGH)
-
-5. **Sanctions Analyst**: No direct name match → match_score 0.05 (CLEAR)
-
-6. **Graph Analyst**:
-   - `query_address_neighborhood("a7f3...")` → finds Bob (2 hops: Alice→Address→Bob)
-   - `query_ip_neighborhood("192.168.1.100")` → finds Charlie (2 hops: Alice→IP→Charlie)
-   - `extract_fraud_paths(alice_id, [bob_id, charlie_id])` → 2 paths
-   - `compute_network_risk_score(paths, ["HIGH", "HIGH"])` → 0.82 (HIGH)
-
-7. **Decision Engine**:
-   - `has_critical_flag`: `graph_analysis_result.has_confirmed_fraud_ring = True` → **IMMEDIATE DENY**
-   - (Even without critical flag: composite = (1-0.92)×0.3 + 0.05×0.4 + 0.82×0.3 = 0.024 + 0.02 + 0.246 = 0.29 → would be APPROVE, but critical flag overrides)
-
-8. **Report Drafter**: Generates narrative: "Customer linked to sanctioned entity Bob via shared address and fraud ring member Charlie via shared IP address."
-
-9. **Audit**: Hash-chained log entries written to S3 with Object Lock
+- **Deterministic temperature:** All LLM calls use `temperature=0.0` for reproducibility.
+- **Structural contract testing:** We don't test exact text. We test that the LLM output, once parsed by Pydantic, produces a valid `ComplianceReport` schema.
+- **Property-based invariants:** Hypothesis verifies that no matter what the LLM returns (within valid schema bounds), the decision engine produces a deterministic APPROVE/DENY/ESCALATE.
+- **Mocked LLM in unit tests:** The `LLMClientPort` interface allows swapping Bedrock for a deterministic mock that returns pre-recorded structured responses.
+- **Golden file regression:** Integration tests store "golden" evaluation results. If a model version change alters outputs beyond acceptable thresholds, the test fails.
 
 ---
 
-### Category F: Cost Optimization & Operational Excellence
+### Q6: "How do you prevent prompt injection through customer data fields?"
 
-**Q: "What's the estimated cost per evaluation?"**
+**Answer:** Multi-layer defense:
 
-A: Cost breakdown per evaluation:
-- Bedrock Claude Sonnet (4 agent calls × ~2000 tokens each): ~$0.08
-- Neptune query (4 Cypher queries): ~$0.001
-- S3 audit writes (5-10 entries × 2KB each): ~$0.0001
-- ECS Fargate compute (~30s at 0.5 vCPU): ~$0.002
-- **Total: ~$0.08-0.12 per evaluation** (LLM cost dominates)
-
-Optimization levers:
-1. **Caching**: Cache identical sanctions screening results (Redis, 24h TTL)
-2. **Prompt compression**: Minimize context window size
-3. **Model selection**: Use Haiku for simple validations, Sonnet for complex reasoning
-4. **Batch inference**: Group evaluations for bulk Bedrock calls (Batch API)
-5. **Early termination**: Critical flag → DENY skips report drafting (saves 1 LLM call)
-
-**Q: "How do you handle regulatory requirements across jurisdictions?"**
-
-A: Configurable by environment:
-1. **Watchlist sources**: Configurable list (`["ofac_sdn", "eu_sanctions", "un_sanctions", "pep"]`)
-2. **Decision thresholds**: Per-jurisdiction config (stricter thresholds for high-risk jurisdictions)
-3. **Data residency**: Cross-region S3 replication policies; Neptune cluster per region
-4. **Audit retention**: Configurable per regulation (7 years for AML, GDPR data minimization)
-5. **Report templates**: Region-specific compliance narratives (FCA, FinCEN, AUSTRAC)
+1. **Pre-API:** Pydantic field validators reject structurally invalid inputs (email regex, E.164 phone, valid IP).
+2. **Security middleware:** 10+ regex patterns detect known injection techniques (`"ignore previous instructions"`, `"[INST]"`, `"<|system|>"`, etc.).
+3. **Input sanitization:** Null bytes, Unicode direction overrides, and control characters are stripped before any downstream processing.
+4. **Cypher query safety:** All Neo4j queries use parameterized bindings (`$entity_id`), never string interpolation. A whitelist of allowed query patterns blocks any write operations.
+5. **Agent constraint:** Strands agents' system prompts explicitly state read-only operations. The @tool functions enforce this at the code level — no tool exists that can write to Neo4j.
+6. **Hypothesis security property:** Property tests generate adversarial strings (SQL injection, XSS, prompt injection patterns) and verify they never reach LLM context undetected.
 
 ---
 
-*End of Interview Preparation Guide*
+### Q7: "What architectural pivot would you make if you had to support real-time streaming instead of batch?"
+
+**Answer:**
+
+```
+Current: CSV → DuckDB → dbt (batch) → Neo4j → Query on demand
+Evolved: Kafka → Flink → Neptune Streams → Real-time query
+
+Specific changes:
+1. Replace dbt batch with Apache Flink (or AWS Kinesis Data Analytics)
+   - Tumbling windows for deduplication
+   - Watermarks for late-arriving events
+2. Neptune Streams for CDC → trigger re-evaluation when new edges appear
+3. EventBridge for evaluation orchestration (event-driven, not poll-driven)
+4. Move from REST polling to WebSocket push for status updates
+5. Redis Graph for hot-path cache (sub-ms neighbor lookups)
+```
+
+The hexagonal architecture makes this pivot straightforward: only the infrastructure adapters change. The domain layer (decision engine, schemas, ports) remains untouched.
+
+---
+
+### Q8: "How do you ensure audit log integrity and tamper-evidence?"
+
+**Answer:**
+
+- **Hash chain:** Each audit entry includes `previous_hash = SHA256(previous_entry)`. Any modification breaks the chain and is detectable.
+- **Append-only S3:** Bucket policy enforces `s3:PutObject` only (no delete, no overwrite). Object Lock in Governance mode for regulatory retention.
+- **Content-addressed storage:** Audit entry key = `{evaluation_id}/{SHA256(payload)}`. Duplicate detection is free.
+- **Hypothesis property:** Tests verify that for any sequence of N audit entries, the hash chain is ordered, verifiable, and tamper-evident.
+- **Cross-region replication:** S3 CRR to a separate AWS account for disaster recovery and separation of duties.
+
+---
+
+### Q9: "What's the failure mode if Neo4j goes down mid-evaluation?"
+
+**Answer:**
+
+1. **Circuit breaker opens** after 5 consecutive Neo4j failures (configurable).
+2. **Graceful degradation:** The orchestrator's conditional edge routes to `escalate` state — the evaluation completes as `ESCALATE_TO_HUMAN_REVIEW` with a note: "Graph analysis unavailable."
+3. **Retry with backoff:** If the failure is transient (network blip), the retry policy (max 3, exponential backoff) handles it transparently.
+4. **Partial results accepted:** The decision engine handles `None` for `graph_analysis_result` by defaulting `network_risk_score = 0.0` — conservative (assumes no graph risk), which combined with other signals still produces a valid decision.
+5. **Health check + alerting:** CloudWatch alarm triggers on Neptune reader unhealthy count > 0. PagerDuty escalation within 5 minutes.
+
+---
+
+### Q10: "How would you add a new agent (e.g., Document Verification) without modifying existing code?"
+
+**Answer:** Open/Closed Principle in action:
+
+1. **Create new port:** `src/domain/ports/document_verification_port.py` (ABC with ≤ 5 methods)
+2. **Create new schema:** `src/domain/schemas/document_verification.py` (Pydantic v2 strict model)
+3. **Add field to KYCState:** `document_verification_result: DocumentVerificationResult | None = None`
+4. **Create agent:** `src/agents/document_verifier_agent.py` with @tool functions
+5. **Add orchestrator node:** Single line: `graph.add_node("verify_documents", _invoke_doc_verifier)`
+6. **Wire in container:** Register new adapter in `build_container()`
+
+**No existing code modified** — the orchestrator's `add_node` and `add_edge` calls are additive. Existing tests continue passing. The architecture boundary tests auto-verify the new agent respects import rules.
+
+---
+
+### Q11: "Walk me through the composite risk score calculation. Why these weights?"
+
+**Answer:**
+
+```python
+composite = (1 - identity_confidence) × 0.3    # Identity risk
+          + sanctions_match_score    × 0.4    # Sanctions risk (highest weight)
+          + network_risk_score       × 0.3    # Network/graph risk
+```
+
+**Weight rationale:**
+- **Sanctions (0.4):** Regulatory consequence of missing a true sanctions match is catastrophic (criminal liability, institutional fines). Highest weight reflects highest business risk.
+- **Identity (0.3):** Low identity confidence suggests the applicant may be synthetic. Important but less immediately actionable than a sanctions hit.
+- **Network (0.3):** Graph connections are powerful signals but can have legitimate explanations (shared apartment building, corporate IP). Equal to identity, subordinate to sanctions.
+
+**Thresholds:**
+- `< 0.3` → APPROVE (strong confidence across all three signals)
+- `> 0.7` → DENY (strong negative signal in at least one area)
+- `0.3–0.7` → ESCALATE (ambiguous — human judgment required)
+
+All weights and thresholds are configurable via environment variables (`KYC_DECISION__IDENTITY_WEIGHT`, etc.) without code deployment.
+
+---
+
+*End of Interview Preparation Document*
